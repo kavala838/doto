@@ -3,15 +3,16 @@ import { useAppContext } from '../context/AppContext';
 import GoalCard from './GoalCard';
 import NewGoalModal from './NewGoalModal';
 import JSONEditorModal from './JSONEditorModal';
-import { getGitHubToken, setGitHubToken } from '../utils/storageUtils';
+import { getGitHubToken, setGitHubToken, fetchGistData } from '../utils/storageUtils';
 
 const HomePage: React.FC = () => {
-  const { data, loading, error, saveData, isSaving, lastSaved } = useAppContext();
+  const { data, loading, error, saveData, isSaving, lastSaved, setData } = useAppContext();
   const [showNewGoalModal, setShowNewGoalModal] = useState(false);
   const [showJsonEditor, setShowJsonEditor] = useState(false);
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [token, setToken] = useState('');
   const [hasToken, setHasToken] = useState(false);
+  const [isFetching, setIsFetching] = useState(false);
   
   // Sort goals to show important ones first
   const sortedGoals = useMemo(() => {
@@ -50,6 +51,20 @@ const HomePage: React.FC = () => {
       setShowTokenInput(false);
       setToken('');
       alert('GitHub token saved successfully!');
+    }
+  };
+  
+  const handleFetchFromGist = async () => {
+    setIsFetching(true);
+    try {
+      const gistData = await fetchGistData();
+      setData(gistData);
+      alert('Data fetched successfully from GitHub Gist!');
+    } catch (error) {
+      console.error('Error fetching from Gist:', error);
+      alert('Failed to fetch data from GitHub Gist. Check console for details.');
+    } finally {
+      setIsFetching(false);
     }
   };
   
@@ -126,6 +141,51 @@ const HomePage: React.FC = () => {
               <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
             </svg>
             {hasToken ? 'Token Set' : 'Set Token'}
+          </button>
+          
+          {/* Fetch Button */}
+          <button
+            onClick={handleFetchFromGist}
+            disabled={isFetching || !hasToken}
+            style={{
+              background: '#3b82f6',
+              border: '1px solid #2563eb',
+              borderRadius: '4px',
+              padding: '5px 10px',
+              cursor: (isFetching || !hasToken) ? 'not-allowed' : 'pointer',
+              color: 'white',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              transition: 'all 0.2s ease',
+              opacity: (isFetching || !hasToken) ? 0.6 : 1
+            }}
+            title={!hasToken ? 'Set GitHub token first' : 'Fetch data from GitHub Gist'}
+          >
+            {isFetching ? (
+              <>
+                <span className="loading-spinner" style={{
+                  display: 'inline-block',
+                  width: '12px',
+                  height: '12px',
+                  border: '2px solid rgba(255,255,255,0.3)',
+                  borderRadius: '50%',
+                  borderTopColor: 'white',
+                  animation: 'spin 1s ease-in-out infinite'
+                }}></span>
+                Fetching...
+              </>
+            ) : (
+              <>
+                {/* Download icon */}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                Fetch
+              </>
+            )}
           </button>
           
           {showTokenInput && (

@@ -78,7 +78,18 @@ export const fetchGistData = async (): Promise<AppData> => {
   try {
     console.log("Fetching data from Gist...");
     
-    const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`);
+    const token = getGitHubToken();
+    const headers: Record<string, string> = {};
+    
+    // Add authorization header if token exists
+    if (token) {
+      headers.Authorization = `token ${token}`;
+      headers.Accept = 'application/vnd.github.v3+json';
+    }
+    
+    const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`, {
+      headers
+    });
     
     const fileKey = Object.keys(response.data.files)[0];
     const content = response.data.files[fileKey].content;

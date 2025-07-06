@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import type { Goal, Child } from '../types';
 import { generateSubtasks } from '../services/aiService';
+import EditNodeModal from './EditNodeModal';
 
 interface TreeNode {
   id: string;
@@ -40,6 +41,14 @@ interface AiSubtasksForm {
   isOpen: boolean;
   isLoading: boolean;
   error: string | null;
+}
+
+// Add the edit node modal state to the component
+interface EditNodeModalState {
+  isOpen: boolean;
+  nodeId: string;
+  title: string;
+  description: string;
 }
 
 // Define these constants outside of renderGraph so they can be used elsewhere
@@ -94,6 +103,14 @@ const GoalTreeView: React.FC = () => {
     message: '',
     isVisible: false,
     type: 'error'
+  });
+  
+  // Add state for edit node modal
+  const [editNodeModal, setEditNodeModal] = useState<EditNodeModalState>({
+    isOpen: false,
+    nodeId: '',
+    title: '',
+    description: ''
   });
   
   // Find the goal by ID
@@ -609,7 +626,7 @@ const GoalTreeView: React.FC = () => {
         <NodeElement
           key={`node-${node.id}`}
           node={node} 
-          x={x - 150} // Center the node (300/2 = 150)
+          x={x - 160} // Center the node (320/2 = 160), updated from 150
           y={y - 60}  // Adjust for vertical centering
           onToggleCollapse={toggleNodeCollapse}
           onAddChild={openNewChildForm}
@@ -619,6 +636,7 @@ const GoalTreeView: React.FC = () => {
           isFocused={focusedNodeId === node.id}
           onDelete={openDeleteConfirm}
           onToggleDone={toggleDoneStatus}
+          onEdit={openEditNodeModal} // Add the onEdit prop
         />
       );
       
@@ -653,7 +671,7 @@ const GoalTreeView: React.FC = () => {
       
       // Calculate connection points distribution
       // For normal children, we'll distribute connection points along the bottom edge
-      const nodeWidth = 300;
+      const nodeWidth = 320; // Updated from 300 to match new node width
       const connectionPointsCount = normalChildren.length;
       const connectionPointSpacing = Math.min(nodeWidth / (connectionPointsCount + 1), 50);
       
@@ -1358,6 +1376,86 @@ const GoalTreeView: React.FC = () => {
     }
   };
   
+  // Add a function to open the edit node modal
+  const openEditNodeModal = (nodeId: string, title: string, description: string) => {
+    setEditNodeModal({
+      isOpen: true,
+      nodeId,
+      title,
+      description
+    });
+  };
+  
+  // Add a function to close the edit node modal
+  const closeEditNodeModal = () => {
+    setEditNodeModal({
+      isOpen: false,
+      nodeId: '',
+      title: '',
+      description: ''
+    });
+  };
+  
+  // Add a function to save the edited node
+  const handleSaveEditedNode = (nodeId: string, title: string, description: string) => {
+    // Update the node in the tree
+    const updatedGoals = updateNodeContent(data.goals, nodeId, title, description) as Goal[];
+    
+    // Update the app context data
+    setData({
+      ...data,
+      goals: updatedGoals
+    });
+    
+    // Rebuild the tree data
+    if (goal) {
+      // Use the same buildTree function that's used elsewhere in the component
+      const buildTreeWithLevel = (node: Goal | Child, level: number): TreeNode => {
+        return {
+          id: node.id,
+          title: node.title,
+          description: node.description || '',
+          children: ('childs' in node && node.childs) 
+            ? node.childs.map(child => buildTreeWithLevel(child, level + 1))
+            : [],
+          level,
+          isCollapsed: false,
+          done: node.done || 0
+        };
+      };
+      
+      const newTreeData = buildTreeWithLevel(goal, 0);
+      setTreeData(newTreeData);
+      
+      // Show success toast
+      showToast(`Node "${title}" updated successfully`, 'success');
+    }
+    
+    // Close the modal
+    closeEditNodeModal();
+  };
+  
+  // Add a function to update the node content
+  const updateNodeContent = (items: (Goal | Child)[], nodeId: string, title: string, description: string): (Goal | Child)[] => {
+    return items.map(item => {
+      if (item.id === nodeId) {
+        // Update this item
+        return {
+          ...item,
+          title,
+          description
+        };
+      } else if ('childs' in item && item.childs.length > 0) {
+        // Recursively update children
+        return {
+          ...item,
+          childs: updateNodeContent(item.childs, nodeId, title, description)
+        };
+      }
+      return item;
+    });
+  };
+  
   if (!goal || !treeData) {
     return (
       <div style={{
@@ -1428,18 +1526,15 @@ const GoalTreeView: React.FC = () => {
   
   return (
     <div 
-      className="goal-tree-view" 
-      style={{ 
-        height: '100vh', 
-        width: '100%', 
-        position: 'relative',
-        overflow: 'hidden',
-        backgroundColor: '#F5F7FA', // Light gray background
-        color: '#333',
-        userSelect: 'none',
-        fontFamily: 'SF Pro Display, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, sans-serif'
-      }}
       ref={containerRef}
+      style={{ 
+        position: 'relative',
+        width: '100%', 
+        height: '100vh',
+        overflow: 'hidden',
+        backgroundColor: '#F8FAFC',
+        cursor: isDragging ? 'grabbing' : 'grab'
+      }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
@@ -2238,6 +2333,17 @@ const GoalTreeView: React.FC = () => {
           style={{ display: 'none' }}
         />
       </div>
+      
+      {/* Add the EditNodeModal */}
+      {editNodeModal.isOpen && (
+        <EditNodeModal
+          nodeId={editNodeModal.nodeId}
+          title={editNodeModal.title}
+          description={editNodeModal.description}
+          onSave={handleSaveEditedNode}
+          onClose={closeEditNodeModal}
+        />
+      )}
     </div>
   );
 };
@@ -2280,7 +2386,8 @@ interface NodeElementProps {
   onFocus: () => void;
   isFocused: boolean;
   onDelete: (nodeId: string, nodeTitle: string) => void;
-  onToggleDone: (nodeId: string) => void; // New prop for toggling done status
+  onToggleDone: (nodeId: string) => void;
+  onEdit: (nodeId: string, title: string, description: string) => void; // New prop for editing
 }
 
 const NodeElement: React.FC<NodeElementProps> = ({ 
@@ -2294,7 +2401,8 @@ const NodeElement: React.FC<NodeElementProps> = ({
   onFocus,
   isFocused,
   onDelete,
-  onToggleDone
+  onToggleDone,
+  onEdit // New prop
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [titleHeight, setTitleHeight] = useState(0);
@@ -2332,12 +2440,12 @@ const NodeElement: React.FC<NodeElementProps> = ({
   // Calculate node height based on content with guaranteed space for action buttons
   // More accurate calculation that accounts for all elements
   const nodeHeight = Math.max(
-    160, // Increased minimum height to 160px to ensure buttons have space
+    180, // Increased minimum height to 180px to ensure buttons have space
     calculatedTitleHeight + 
     (node.children.length > 0 ? 20 : 0) + // Extra space for nodes with children
     20 + // Divider height + margins (increased)
     (showDetails && node.description ? Math.min(descriptionHeight, 120) + 20 : 0) + 
-    Math.max(actionBarHeight + 20, 60) + // Guarantee at least 60px for action buttons
+    Math.max(actionBarHeight + 30, 70) + // Guarantee at least 70px for action buttons
     32 // Padding (top and bottom)
   );
   
@@ -2402,6 +2510,12 @@ const NodeElement: React.FC<NodeElementProps> = ({
     onToggleDone(node.id);
   };
   
+  // Add a handler for the edit button
+  const handleEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onEdit(node.id, node.title, node.description);
+  };
+  
   return (
     <g
       transform={`translate(${x}, ${y})`}
@@ -2414,7 +2528,7 @@ const NodeElement: React.FC<NodeElementProps> = ({
       <rect
         x="0"
         y="0"
-        width="300"
+        width="320" // Increased from 300 to provide more space for icons
         height={nodeHeight}
         rx="14"
         ry="14"
@@ -2438,7 +2552,7 @@ const NodeElement: React.FC<NodeElementProps> = ({
         <rect
           x="-5"
           y="-5"
-          width="310"
+          width="330" // Increased from 310 to match the increased node width
           height={nodeHeight + 10}
           rx="18"
           ry="18"
@@ -2451,7 +2565,7 @@ const NodeElement: React.FC<NodeElementProps> = ({
       )}
       
       {/* Node content - fixed width and dynamic height */}
-      <foreignObject x="0" y="0" width="300" height={nodeHeight}>
+      <foreignObject x="0" y="0" width="320" height={nodeHeight}> {/* Increased from 300 to match the rect width */}
         <div style={{
           padding: '16px',
           paddingTop: '16px',
@@ -2570,19 +2684,21 @@ const NodeElement: React.FC<NodeElementProps> = ({
             style={{
               display: 'flex',
               justifyContent: 'space-between', // Changed from flex-end to space-between
-              padding: '0 14px',
+              padding: '0 12px', // Adjusted padding
               marginBottom: '8px',
               marginTop: '12px',
               minHeight: '40px', // Ensure minimum height for action bar
-              flex: '0 0 auto' // Don't allow this to shrink
+              flex: '0 0 auto', // Don't allow this to shrink
+              width: '100%', // Ensure full width
+              boxSizing: 'border-box' // Include padding in width calculation
             }}
           >
             {/* Left side - done checkbox */}
             <div>
               <div 
                 style={{
-                  width: '36px',
-                  height: '36px',
+                  width: '32px', // Slightly reduced size
+                  height: '32px', // Slightly reduced size
                   borderRadius: '50%',
                   backgroundColor: isHovered ? (node.done === 1 ? '#E8F5E9' : '#F5F5F5') : '#FFFFFF',
                   border: `1px solid ${node.done === 1 ? '#4CAF50' : '#9E9E9E'}`,
@@ -2605,12 +2721,12 @@ const NodeElement: React.FC<NodeElementProps> = ({
                 title={node.done === 1 ? "Mark as not done" : "Mark as done"}
               >
                 {node.done === 1 ? (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="9 11 12 14 22 4"></polyline>
                     <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
                   </svg>
                 ) : (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
                   </svg>
                 )}
@@ -2620,13 +2736,18 @@ const NodeElement: React.FC<NodeElementProps> = ({
             {/* Right side - action buttons */}
             <div style={{
               display: 'flex',
-              gap: '14px'
+              gap: '10px', // Slightly increased gap for better spacing
+              flexWrap: 'nowrap', // Prevent wrapping
+              overflow: 'visible', // Allow overflow to be visible
+              justifyContent: 'flex-end', // Align to the right
+              width: 'auto', // Auto width
+              maxWidth: '220px' // Limit maximum width to prevent overflow
             }}>
               {/* View details button */}
               <div 
                 style={{
-                  width: '36px',
-                  height: '36px',
+                  width: '32px', // Slightly reduced size
+                  height: '32px', // Slightly reduced size
                   borderRadius: '50%',
                   backgroundColor: isHovered ? '#E8F5E9' : '#FFFFFF',
                   border: '1px solid #4CAF50',
@@ -2648,7 +2769,7 @@ const NodeElement: React.FC<NodeElementProps> = ({
                 }}
                 title={showDetails ? "Hide details" : "View details"}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                   <circle cx="12" cy="12" r="3"></circle>
                 </svg>
@@ -2657,8 +2778,8 @@ const NodeElement: React.FC<NodeElementProps> = ({
               {/* AI Generate Button */}
               <div 
                 style={{
-                  width: '36px',
-                  height: '36px',
+                  width: '32px', // Slightly reduced size
+                  height: '32px', // Slightly reduced size
                   borderRadius: '50%',
                   backgroundColor: isHovered ? '#EDE7F6' : '#FFFFFF',
                   border: '1px solid #673AB7',
@@ -2680,7 +2801,7 @@ const NodeElement: React.FC<NodeElementProps> = ({
                 }}
                 title="Generate AI subtasks"
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 2a10 10 0 0 0-9.95 9h11.64L9.74 7.05a1 1 0 0 1 1.41-1.41l5.66 5.65a1 1 0 0 1 0 1.42l-5.66 5.65a1 1 0 0 1-1.41-1.41L13.69 13H2.05A10 10 0 1 0 12 2z"></path>
                 </svg>
               </div>
@@ -2688,8 +2809,8 @@ const NodeElement: React.FC<NodeElementProps> = ({
               {/* Add Child Button */}
               <div 
                 style={{
-                  width: '36px',
-                  height: '36px',
+                  width: '32px', // Slightly reduced size
+                  height: '32px', // Slightly reduced size
                   borderRadius: '50%',
                   backgroundColor: isHovered ? '#E3F2FD' : '#FFFFFF',
                   border: '1px solid #2196F3',
@@ -2711,7 +2832,7 @@ const NodeElement: React.FC<NodeElementProps> = ({
                 }}
                 title="Add child"
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="12" y1="5" x2="12" y2="19"></line>
                   <line x1="5" y1="12" x2="19" y2="12"></line>
                 </svg>
@@ -2720,8 +2841,8 @@ const NodeElement: React.FC<NodeElementProps> = ({
               {/* Delete Button */}
               <div 
                 style={{
-                  width: '36px',
-                  height: '36px',
+                  width: '32px', // Slightly reduced size
+                  height: '32px', // Slightly reduced size
                   borderRadius: '50%',
                   backgroundColor: isHovered ? '#FFEBEE' : '#FFFFFF',
                   border: '1px solid #F44336',
@@ -2741,12 +2862,43 @@ const NodeElement: React.FC<NodeElementProps> = ({
                   e.currentTarget.style.backgroundColor = isHovered ? '#FFEBEE' : '#FFFFFF';
                   e.currentTarget.style.transform = 'scale(1)';
                 }}
-                title="Delete node"
+                title="Delete"
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 6h18"></path>
-                  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+              </div>
+              
+              {/* Edit Button */}
+              <div 
+                style={{
+                  width: '32px', // Slightly reduced size
+                  height: '32px', // Slightly reduced size
+                  borderRadius: '50%',
+                  backgroundColor: isHovered ? '#E1F5FE' : '#FFFFFF',
+                  border: '1px solid #03A9F4',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  color: '#03A9F4'
+                }}
+                onClick={handleEdit}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#E1F5FE';
+                  e.currentTarget.style.transform = 'scale(1.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = isHovered ? '#E1F5FE' : '#FFFFFF';
+                  e.currentTarget.style.transform = 'scale(1)';
+                }}
+                title="Edit"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                 </svg>
               </div>
             </div>
