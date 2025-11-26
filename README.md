@@ -2,6 +2,27 @@
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
+## GitHub Gist Integration
+
+This project uses GitHub Gist to synchronize data. To set up the integration:
+
+1. Create a GitHub Personal Access Token with `gist` scope at [GitHub Settings](https://github.com/settings/tokens)
+2. Create a `.env` file in the root directory
+3. Add your token to the `.env` file:
+   ```
+   VITE_GIST_KEY=your_github_personal_access_token_here
+   ```
+4. (Optional) To use your own Gist, create a new Gist on GitHub and add its ID to the `.env` file:
+   ```
+   VITE_GIST_ID=your_gist_id_here
+   ```
+   If not specified, the app will use a default Gist ID or automatically create a new Gist for you.
+5. Restart the development server if it's running
+
+**Note:** 
+- Keep your token secure and never commit it to version control.
+- When the app creates a new Gist for you, it will display the ID in the console. You can add this ID to your `.env` file to ensure you always use the same Gist.
+
 ## OpenAI API Integration
 
 This project uses OpenAI's API to enhance goal descriptions. To set up the API:

@@ -3,6 +3,7 @@
 // To use real OpenAI API, replace this with actual API calls
 
 import { GOAL_ENHANCEMENT_SYSTEM_PROMPT, GOAL_ENHANCEMENT_USER_PROMPT } from './aiService';
+import { callSecureApi } from '../lib/secureApiClient';
 
 // Fallback function to generate a mock response
 const generateFallbackResponse = (description: string): string => {
@@ -28,21 +29,11 @@ export const callOpenAI = async (
   userPrompt: string
 ): Promise<string> => {
   try {
-    // Real OpenAI API call
-    const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-    
-    if (!apiKey) {
-      console.warn('OpenAI API key is missing. Using fallback response generator.');
-      return generateFallbackResponse(userPrompt.trim());
-    }
-    
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const data = await callSecureApi<any>({
+      service: 'openai',
+      path: '/v1/chat/completions',
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
+      body: {
         model: 'gpt-4',
         messages: [
           { role: 'system', content: systemPrompt },
@@ -50,14 +41,8 @@ export const callOpenAI = async (
         ],
         temperature: 0.7,
         max_tokens: 500
-      })
+      }
     });
-
-    const data = await response.json();
-    if (!response.ok) {
-      console.error('OpenAI API error:', data.error);
-      throw new Error(data.error?.message || 'Failed to call OpenAI API');
-    }
 
     return data.choices[0].message.content;
     

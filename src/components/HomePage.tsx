@@ -3,15 +3,12 @@ import { useAppContext } from '../context/AppContext';
 import GoalCard from './GoalCard';
 import NewGoalModal from './NewGoalModal';
 import JSONEditorModal from './JSONEditorModal';
-import { getGitHubToken, setGitHubToken, fetchGistData } from '../utils/storageUtils';
+import { fetchGistData } from '../utils/storageUtils';
 
 const HomePage: React.FC = () => {
   const { data, loading, error, saveData, isSaving, lastSaved, setData } = useAppContext();
   const [showNewGoalModal, setShowNewGoalModal] = useState(false);
   const [showJsonEditor, setShowJsonEditor] = useState(false);
-  const [showTokenInput, setShowTokenInput] = useState(false);
-  const [token, setToken] = useState('');
-  const [hasToken, setHasToken] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
   
   // Sort goals to show important ones first
@@ -39,30 +36,19 @@ const HomePage: React.FC = () => {
   }, [data.goals, data.tags]);
   
   useEffect(() => {
-    // Check if GitHub token exists
-    const token = getGitHubToken();
-    setHasToken(!!token);
+    // Tokens are now managed server-side; no frontend token check needed.
   }, []);
-  
-  const handleSetToken = () => {
-    if (token.trim()) {
-      setGitHubToken(token.trim());
-      setHasToken(true);
-      setShowTokenInput(false);
-      setToken('');
-      alert('GitHub token saved successfully!');
-    }
-  };
   
   const handleFetchFromGist = async () => {
     setIsFetching(true);
     try {
       const gistData = await fetchGistData();
-      setData(gistData);
-      alert('Data fetched successfully from GitHub Gist!');
+      // Pass true as second argument to skipGistUpdate since we just got this data from the Gist
+      setData(gistData, true);
+      alert('Data refreshed successfully from GitHub Gist!');
     } catch (error) {
       console.error('Error fetching from Gist:', error);
-      alert('Failed to fetch data from GitHub Gist. Check console for details.');
+      alert('Failed to refresh data from GitHub Gist. Check console for details.');
     } finally {
       setIsFetching(false);
     }
@@ -113,54 +99,33 @@ const HomePage: React.FC = () => {
             <div style={{
               fontSize: '12px',
               color: '#666',
-              fontStyle: 'italic'
+              fontStyle: 'italic',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px'
             }}>
-              Last saved: {lastSaved.toLocaleTimeString()}
+              <span>Last saved: {lastSaved.toLocaleTimeString()}</span>
             </div>
           )}
           
-          {/* GitHub Token Button */}
-          <button
-            onClick={() => setShowTokenInput(!showTokenInput)}
-            style={{
-              background: hasToken ? '#4caf50' : '#f0f0f0',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
-              padding: '5px 10px',
-              cursor: 'pointer',
-              color: hasToken ? 'white' : 'inherit',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '5px',
-              transition: 'all 0.2s ease'
-            }}
-            title={hasToken ? 'GitHub Token is set' : 'Set GitHub Token'}
-          >
-            {/* GitHub icon */}
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
-            </svg>
-            {hasToken ? 'Token Set' : 'Set Token'}
-          </button>
-          
-          {/* Fetch Button */}
+          {/* Refresh Button */}
           <button
             onClick={handleFetchFromGist}
-            disabled={isFetching || !hasToken}
+            disabled={isFetching}
             style={{
               background: '#3b82f6',
               border: '1px solid #2563eb',
               borderRadius: '4px',
               padding: '5px 10px',
-              cursor: (isFetching || !hasToken) ? 'not-allowed' : 'pointer',
+              cursor: isFetching ? 'not-allowed' : 'pointer',
               color: 'white',
               display: 'flex',
               alignItems: 'center',
               gap: '5px',
               transition: 'all 0.2s ease',
-              opacity: (isFetching || !hasToken) ? 0.6 : 1
+              opacity: isFetching ? 0.6 : 1
             }}
-            title={!hasToken ? 'Set GitHub token first' : 'Fetch data from GitHub Gist'}
+            title="Refresh data from GitHub Gist"
           >
             {isFetching ? (
               <>
@@ -173,86 +138,21 @@ const HomePage: React.FC = () => {
                   borderTopColor: 'white',
                   animation: 'spin 1s ease-in-out infinite'
                 }}></span>
-                Fetching...
+                Refreshing...
               </>
             ) : (
               <>
-                {/* Download icon */}
+                {/* Refresh icon */}
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                  <polyline points="7 10 12 15 17 10"></polyline>
-                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                  <path d="M23 4v6h-6"></path>
+                  <path d="M1 20v-6h6"></path>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"></path>
+                  <path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"></path>
                 </svg>
-                Fetch
+                Refresh
               </>
             )}
           </button>
-          
-          {showTokenInput && (
-            <div style={{
-              position: 'absolute',
-              top: '60px',
-              right: '20px',
-              backgroundColor: 'white',
-              padding: '15px',
-              borderRadius: '4px',
-              boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-              zIndex: 100,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '10px',
-              width: '300px'
-            }}>
-              <div>Enter your GitHub token:</div>
-              <input
-                type="password"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                style={{
-                  padding: '8px',
-                  borderRadius: '4px',
-                  border: '1px solid #ccc'
-                }}
-                placeholder="GitHub personal access token"
-              />
-              <div style={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                gap: '10px'
-              }}>
-                <button
-                  onClick={() => setShowTokenInput(false)}
-                  style={{
-                    padding: '5px 10px',
-                    borderRadius: '4px',
-                    border: '1px solid #ccc',
-                    background: '#f0f0f0'
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSetToken}
-                  style={{
-                    padding: '5px 10px',
-                    borderRadius: '4px',
-                    border: 'none',
-                    background: '#4caf50',
-                    color: 'white'
-                  }}
-                >
-                  Save Token
-                </button>
-              </div>
-              <div style={{
-                fontSize: '12px',
-                color: '#666',
-                marginTop: '5px'
-              }}>
-                Note: Token needs 'gist' scope permission
-              </div>
-            </div>
-          )}
           
           <button 
             onClick={saveData}

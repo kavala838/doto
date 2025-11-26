@@ -3,7 +3,7 @@ import { useAppContext } from '../context/AppContext';
 import { getCurrentISOWeek } from '../utils/dateUtils';
 import { enhanceGoalDescription } from '../services/aiService';
 import { DateTime } from 'luxon';
-import type { Goal, Tag } from '../types';
+import type { Goal } from '../types';
 
 interface NewGoalModalProps {
   onClose: () => void;
@@ -119,11 +119,12 @@ const NewGoalModal: React.FC<NewGoalModalProps> = ({ onClose }) => {
       id: newId,
       title,
       description: useEnhanced ? enhancedDescription : description,
-      week: useTimeframe ? startWeek : null,
+      week: useTimeframe ? parseInt(startWeek.split('-')[1]) : null, // Convert to number
       duration: useTimeframe ? parseInt(duration) : null,
       childs: [],
       done: 0,
-      tags: selectedTags
+      tags: selectedTags,
+      createdAt: timestamp // Add the required createdAt field
     };
     
     console.log("Adding goal with tags", { 

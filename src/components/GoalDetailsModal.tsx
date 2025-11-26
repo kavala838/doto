@@ -10,7 +10,7 @@ interface GoalDetailsModalProps {
 }
 
 const GoalDetailsModal: React.FC<GoalDetailsModalProps> = ({ goal, onClose }) => {
-  const weekInfo = getWeekInfo(goal.week);
+  const weekInfo = goal.week !== undefined && goal.week !== null ? getWeekInfo(String(goal.week)) : null;
   const [showEditModal, setShowEditModal] = useState(false);
   const { data } = useAppContext();
   

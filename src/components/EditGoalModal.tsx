@@ -3,7 +3,7 @@ import { useAppContext } from '../context/AppContext';
 import { getCurrentISOWeek } from '../utils/dateUtils';
 import { enhanceGoalDescription } from '../services/aiService';
 import { DateTime } from 'luxon';
-import type { Goal, Tag } from '../types';
+import type { Goal } from '../types';
 
 interface EditGoalModalProps {
   goal: Goal;
@@ -28,7 +28,7 @@ const EditGoalModal: React.FC<EditGoalModalProps> = ({ goal, onClose }) => {
   const [startWeek, setStartWeek] = useState(goal.week || getCurrentISOWeek());
   const [selectedTags, setSelectedTags] = useState<string[]>(goal.tags || []);
   
-  const { data, setData, updateGoals, saveData } = useAppContext();
+  const { data, updateGoals, saveData } = useAppContext();
 
   // Generate week options for the next 12 weeks
   const weekOptions = useMemo(() => {
@@ -63,7 +63,9 @@ const EditGoalModal: React.FC<EditGoalModalProps> = ({ goal, onClose }) => {
 
   // Calculate start and end dates based on selected week and duration
   const dateInfo = useMemo(() => {
-    const [year, week] = startWeek.split('-').map(Number);
+    // Ensure startWeek is a string before splitting
+    const startWeekStr = String(startWeek);
+    const [year, week] = startWeekStr.split('-').map(Number);
     
     // Create start date from ISO week
     const startDate = DateTime.fromObject({ 

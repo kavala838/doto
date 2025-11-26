@@ -608,8 +608,8 @@ const GoalTreeView: React.FC = () => {
     
     // Function to recursively position nodes
     const renderNode = (node: TreeNode, x: number, y: number, availableWidth: number): GraphElement[] => {
-      // Check if this node is the root node
-      const isRoot = goal && node.id === goal.id;
+      // Check if this node is the root node (not used currently)
+      // const isRoot = goal && node.id === goal.id;
       
       // Store the node position in our map
       newPositions.set(node.id, { x, y });
@@ -628,7 +628,6 @@ const GoalTreeView: React.FC = () => {
           node={node} 
           x={x - 160} // Center the node (320/2 = 160), updated from 150
           y={y - 60}  // Adjust for vertical centering
-          onToggleCollapse={toggleNodeCollapse}
           onAddChild={openNewChildForm}
           onGenerateAI={openAiSubtasksForm}
           onMinimizeAllChildren={minimizeAllChildren}
@@ -2357,7 +2356,7 @@ const createConnectorPath = (
   nodeHeight: number = 0
 ) => {
   // Calculate horizontal and vertical distances
-  const dx = endX - startX;
+  // const dx = endX - startX; // Not used currently
   const dy = endY - startY;
   
   // Adjust the start point based on the node's height
@@ -2379,7 +2378,6 @@ interface NodeElementProps {
   node: TreeNode;
   x: number;
   y: number;
-  onToggleCollapse: (nodeId: string, isChildToggle?: boolean) => void;
   onAddChild: (parentId: string, parentTitle: string) => void;
   onGenerateAI: (parentId: string, parentTitle: string, parentDescription: string) => void;
   onMinimizeAllChildren: (parentId: string, childrenIds: string[]) => void;
@@ -2394,7 +2392,6 @@ const NodeElement: React.FC<NodeElementProps> = ({
   node, 
   x, 
   y, 
-  onToggleCollapse, 
   onAddChild, 
   onGenerateAI, 
   onMinimizeAllChildren,
@@ -2449,14 +2446,6 @@ const NodeElement: React.FC<NodeElementProps> = ({
     32 // Padding (top and bottom)
   );
   
-  const handleToggleCollapse = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (node.children.length > 0) {
-      // Standard node toggle (not a child toggle)
-      onToggleCollapse(node.id, false);
-    }
-  };
-  
   const handleAddChild = (e: React.MouseEvent) => {
     e.stopPropagation();
     onAddChild(node.id, node.title);
@@ -2487,10 +2476,11 @@ const NodeElement: React.FC<NodeElementProps> = ({
   };
   
   // Truncate title if it's too long
-  const truncateText = (text: string, maxLength: number) => {
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength) + '...';
-  };
+  // Commented out as it's not currently used
+  // const truncateText = (text: string, maxLength: number) => {
+  //   if (text.length <= maxLength) return text;
+  //   return text.substring(0, maxLength) + '...';
+  // };
   
   const displayTitle = node.title || 'Untitled';
   

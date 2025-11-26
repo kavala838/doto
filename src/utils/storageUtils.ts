@@ -1,9 +1,7 @@
-import axios from 'axios';
+import { callSecureApi } from '../lib/secureApiClient';
 import type { AppData, Tag } from '../types';
 
 const STORAGE_KEY = 'doto_app_data';
-const GIST_ID = '9743a632b1053d80be721f0f41004daa';
-const GITHUB_TOKEN_KEY = 'github_token';
 const LAST_GIST_UPDATE_KEY = 'last_gist_update';
 
 // Default tags
@@ -16,26 +14,56 @@ const defaultTags: Tag[] = [
 ];
 
 /**
- * Get GitHub token from localStorage
+ * Get GitHub token from environment variable
  */
 export const getGitHubToken = (): string | null => {
-  return localStorage.getItem(GITHUB_TOKEN_KEY);
+  console.log("%c TOKEN DEBUG: Tokens are now handled server-side via Firebase Functions.", "background: #9c27b0; color: white; padding: 2px 5px; border-radius: 3px;");
+  return null;
 };
 
 /**
- * Set GitHub token in localStorage
+ * Get Gist ID - either from environment variable or default
  */
-export const setGitHubToken = (token: string): void => {
-  localStorage.setItem(GITHUB_TOKEN_KEY, token);
+export const getGistId = (): string => {
+  console.log("%c GIST DEBUG: Gist ID is now managed in Firebase Functions config.", "background: #ff0000; color: white; padding: 2px 5px; border-radius: 3px;");
+  return '';
 };
 
 /**
- * Load data from localStorage or GitHub Gist
+ * Set GitHub token in localStorage - No longer used, kept for compatibility
+ * @deprecated Use VITE_GIST_KEY environment variable instead
+ */
+export const setGitHubToken = (_token: string): void => {
+  console.log("%c TOKEN DEBUG: Setting GitHub token is disabled. Using environment variable VITE_GIST_KEY instead.", "background: #9c27b0; color: white; padding: 2px 5px; border-radius: 3px;");
+  // No longer storing token in localStorage
+};
+
+/**
+ * Load data from GitHub Gist first, then fallback to localStorage
+ * This function is used as a fallback when direct Gist fetching fails in AppContext
  */
 export const loadData = async (): Promise<AppData> => {
   try {
-    console.log("Loading data...");
-    // Try to get data from local storage first
+    console.log("Loading data (fallback flow)...");
+    
+    // Check if we have a token
+    const token = getGitHubToken();
+    
+    // If we have a token, try GitHub Gist first
+    if (token) {
+      try {
+        console.log("Token found, trying to fetch from GitHub Gist...");
+        const gistData = await fetchGistData();
+        console.log("Successfully loaded data from GitHub Gist");
+        return gistData;
+      } catch (gistError) {
+        console.error("Failed to fetch from Gist despite having token, falling back to localStorage:", gistError);
+      }
+    } else {
+      console.log("No GitHub token found, skipping Gist fetch");
+    }
+    
+    // If Gist fetch fails or no token, try to get data from local storage
     const storedData = localStorage.getItem(STORAGE_KEY);
     
     if (storedData) {
@@ -56,14 +84,12 @@ export const loadData = async (): Promise<AppData> => {
         }));
       }
       
-      // Try to fetch from Gist in the background to get latest data
-      fetchGistData().catch(err => console.error("Background Gist fetch failed:", err));
-      
       return parsedData;
     }
     
-    // If not in local storage, fetch from GitHub Gist
-    return await fetchGistData();
+    // If nothing in localStorage either, return default data
+    console.log("No data found in localStorage, using default data");
+    return { goals: [], tags: defaultTags };
   } catch (error) {
     console.error("Error loading data:", error);
     // Return default data if nothing found or error
@@ -73,68 +99,87 @@ export const loadData = async (): Promise<AppData> => {
 
 /**
  * Fetch data from GitHub Gist
+ * This function will throw an error if it fails to fetch from Gist
  */
 export const fetchGistData = async (): Promise<AppData> => {
+  console.log("%c GIST DATA FLOW: Fetching data from Gist...", "background: #4caf50; color: white; padding: 2px 5px; border-radius: 3px;");
+
   try {
-    console.log("Fetching data from Gist...");
-    
-    const token = getGitHubToken();
-    const headers: Record<string, string> = {};
-    
-    // Add authorization header if token exists
-    if (token) {
-      headers.Authorization = `token ${token}`;
-      headers.Accept = 'application/vnd.github.v3+json';
-    }
-    
-    const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`, {
-      headers
+    const response = await callSecureApi<any>({
+      service: 'gist',
+      method: 'GET'
     });
-    
-    const fileKey = Object.keys(response.data.files)[0];
-    const content = response.data.files[fileKey].content;
-    const data = JSON.parse(content) as AppData;
-    
-    console.log("Successfully fetched data from Gist");
-    
-    // Ensure tags exist
-    if (!data.tags) {
-      console.log("Adding default tags to Gist data");
-      data.tags = defaultTags;
+
+    console.log("%c GIST DEBUG: Raw Gist response:", "background: #ff0000; color: white; padding: 2px 5px; border-radius: 3px;", response);
+
+    const fileKeys = Object.keys(response.files || {});
+    console.log("%c GIST DEBUG: Available files in Gist:", "background: #ff0000; color: white; padding: 2px 5px; border-radius: 3px;", fileKeys);
+
+    if (fileKeys.length === 0) {
+      throw new Error("No files found in the Gist");
     }
-    
-    // Ensure each goal has a tags array
-    if (data.goals) {
-      data.goals = data.goals.map(goal => ({
-        ...goal,
-        tags: goal.tags || []
-      }));
+
+    const fileKey = fileKeys[0];
+    console.log("%c GIST DEBUG: Using file:", "background: #ff0000; color: white; padding: 2px 5px; border-radius: 3px;", fileKey);
+
+    const content = response.files[fileKey].content as string;
+    console.log("%c GIST DEBUG: File content length:", "background: #ff0000; color: white; padding: 2px 5px; border-radius: 3px;", content.length);
+
+    try {
+      const data = JSON.parse(content) as AppData;
+      console.log("%c GIST DEBUG: Successfully parsed JSON data:", "background: #ff0000; color: white; padding: 2px 5px; border-radius: 3px;", {
+        hasGoals: !!data.goals,
+        goalCount: data.goals?.length || 0,
+        hasTags: !!data.tags,
+        tagCount: data.tags?.length || 0
+      });
+
+      console.log("%c GIST DATA FLOW: Successfully fetched data from Gist", "background: #4caf50; color: white; padding: 2px 5px; border-radius: 3px;");
+
+      // Ensure tags exist
+      if (!data.tags) {
+        console.log("Adding default tags to Gist data");
+        data.tags = defaultTags;
+      }
+
+      // Ensure each goal has a tags array
+      if (data.goals) {
+        data.goals = data.goals.map((goal: any) => ({
+          ...goal,
+          tags: goal.tags || []
+        }));
+      }
+
+      // Store in local storage and update timestamp
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      localStorage.setItem(LAST_GIST_UPDATE_KEY, Date.now().toString());
+      console.log("%c GIST DATA FLOW: Updated localStorage with data from Gist", "background: #4caf50; color: white; padding: 2px 5px; border-radius: 3px;");
+
+      return data;
+    } catch (parseError) {
+      console.error("%c GIST DEBUG: Failed to parse JSON content:", "background: #ff0000; color: white; padding: 2px 5px; border-radius: 3px;", parseError);
+      console.log("%c GIST DEBUG: Raw content preview:", "background: #ff0000; color: white; padding: 2px 5px; border-radius: 3px;", content.substring(0, 100) + "...");
+      throw new Error("Failed to parse Gist content as JSON");
     }
-    
-    // Store in local storage
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    
-    return data;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching from Gist:", error);
-    
-    // If Gist fetch fails, use default data or existing localStorage data
-    const storedData = localStorage.getItem(STORAGE_KEY);
-    if (storedData) {
-      return JSON.parse(storedData) as AppData;
-    }
-    
-    // If nothing in localStorage either, return default data
-    return { goals: [], tags: defaultTags };
+    throw error;
   }
 };
 
 /**
  * Save data to localStorage and GitHub Gist
+ * @param data The data to save
+ * @param forceGistUpdate Whether to force an update to the Gist
+ * @param skipGistUpdate Whether to skip updating the Gist entirely (used during initialization)
  */
-export const saveData = async (data: AppData, forceGistUpdate = false): Promise<void> => {
+export const saveData = async (
+  data: AppData, 
+  forceGistUpdate = false, 
+  skipGistUpdate = false
+): Promise<void> => {
   try {
-    console.log("Saving data...");
+    console.log("Saving data...", skipGistUpdate ? "(skipping Gist update)" : "");
     
     // Ensure tags exist
     const dataToSave = { 
@@ -158,6 +203,12 @@ export const saveData = async (data: AppData, forceGistUpdate = false): Promise<
     localStorage.setItem(STORAGE_KEY, jsonData);
     console.log("Data saved to localStorage successfully");
     
+    // Skip Gist update if requested
+    if (skipGistUpdate) {
+      console.log("Skipping Gist update as requested");
+      return;
+    }
+    
     // Check if we should update the Gist
     const now = Date.now();
     const lastGistUpdate = parseInt(localStorage.getItem(LAST_GIST_UPDATE_KEY) || '0', 10);
@@ -177,35 +228,29 @@ export const saveData = async (data: AppData, forceGistUpdate = false): Promise<
  */
 export const updateGist = async (data: AppData): Promise<void> => {
   try {
-    const token = getGitHubToken();
-    
-    if (!token) {
-      console.log("No GitHub token found, skipping Gist update");
-      return;
-    }
-    
-    console.log("Updating GitHub Gist...");
+    console.log("%c GIST UPDATE DEBUG: Updating GitHub Gist...", "background: #ff0000; color: white; padding: 2px 5px; border-radius: 3px;");
+    console.log("%c GIST UPDATE DEBUG: Data summary:", "background: #ff0000; color: white; padding: 2px 5px; border-radius: 3px;", {
+      hasGoals: !!data.goals,
+      goalCount: data.goals?.length || 0,
+      hasTags: !!data.tags,
+      tagCount: data.tags?.length || 0
+    });
     
     const content = JSON.stringify(data, null, 2);
+    console.log("%c GIST UPDATE DEBUG: Content length:", "background: #ff0000; color: white; padding: 2px 5px; border-radius: 3px;", content.length);
     
-    await axios.patch(
-      `https://api.github.com/gists/${GIST_ID}`,
-      {
+    await callSecureApi({
+      service: 'gist',
+      method: 'PATCH',
+      body: {
         files: {
           'doto_data.json': {
             content
           }
         }
-      },
-      {
-        headers: {
-          Authorization: `token ${token}`,
-          Accept: 'application/vnd.github.v3+json'
-        }
       }
-    );
-    
-    console.log("GitHub Gist updated successfully");
+    });
+    console.log("%c GIST UPDATE DEBUG: GitHub Gist updated successfully", "background: #ff0000; color: white; padding: 2px 5px; border-radius: 3px;");
   } catch (error) {
     console.error("Error updating GitHub Gist:", error);
     throw error;
@@ -266,5 +311,51 @@ export const clearData = (): void => {
     console.log("Data cleared from localStorage");
   } catch (error) {
     console.error("Error clearing data from localStorage:", error);
+  }
+};
+
+/**
+ * Create a new Gist with default data
+ * This is useful when a user has a token but no Gist yet
+ */
+export const createNewGist = async (): Promise<string> => {
+  try {
+    console.log("%c GIST CREATE: Creating new GitHub Gist...", "background: #9c27b0; color: white; padding: 2px 5px; border-radius: 3px;");
+    
+    // Create initial data with default tags
+    const initialData: AppData = {
+      goals: [],
+      tags: defaultTags
+    };
+    
+    const content = JSON.stringify(initialData, null, 2);
+    
+    const response = await callSecureApi<any>({
+      service: 'gist',
+      path: '/gists',
+      method: 'POST',
+      body: {
+        description: 'Doto App Data',
+        public: false,
+        files: {
+          'doto_data.json': {
+            content
+          }
+        }
+      }
+    });
+    
+    const newGistId = response.id;
+    console.log("%c GIST CREATE: Created new Gist with ID:", "background: #9c27b0; color: white; padding: 2px 5px; border-radius: 3px;", newGistId);
+    console.log("%c GIST CREATE: Gist ID managed via Firebase Functions config.", "background: #9c27b0; color: white; padding: 2px 5px; border-radius: 3px;");
+    
+    // Store the initial data in localStorage
+    localStorage.setItem(STORAGE_KEY, content);
+    localStorage.setItem(LAST_GIST_UPDATE_KEY, Date.now().toString());
+    
+    return newGistId;
+  } catch (error: any) {
+    console.error("Error creating new Gist:", error);
+    throw error;
   }
 }; 

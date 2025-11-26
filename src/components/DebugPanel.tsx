@@ -34,19 +34,23 @@ const DebugPanel: React.FC = () => {
       console.log("Parsed JSON data:", parsedData);
       
       // Save directly to localStorage
-      const saved = saveRawJson(jsonValue);
-      
-      if (saved) {
-        // Update the app state to refresh components
-        setData(parsedData);
-        console.log("JSON data saved and app state updated");
-        
-        // Close the JSON editor
-        setJsonError('');
-        setShowJsonEditor(false);
-      } else {
-        setJsonError('Failed to save JSON data to localStorage');
-      }
+      saveRawJson(jsonValue)
+        .then(saved => {
+          if (saved) {
+            // Update the app state to refresh components
+            setData(parsedData);
+            console.log("JSON data saved and app state updated");
+            
+            // Close the JSON editor
+            setJsonError('');
+            setShowJsonEditor(false);
+          } else {
+            setJsonError('Failed to save JSON data to localStorage');
+          }
+        })
+        .catch(error => {
+          setJsonError('Error saving JSON: ' + error.message);
+        });
     } catch (error) {
       console.error("JSON parse error:", error);
       setJsonError('Invalid JSON: ' + (error as Error).message);
